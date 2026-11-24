@@ -1,0 +1,669 @@
+```html
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neon File Manager // CyberOS</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        neon: {
+                            green: '#00ff66',
+                            dim: '#051205',
+                            dark: '#000000',
+                            panel: '#000000',
+                            border: '#00ff6650',
+                            glow: 'rgba(0, 255, 102, 0.4)'
+                        }
+                    },
+                    fontFamily: {
+                        mono: ['Courier New', Courier, monospace]
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* Custom scrollbar and neon glow effects */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #000000;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #00ff66;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #00cc52;
+        }
+        .neon-glow {
+            box-shadow: 0 0 12px rgba(0, 255, 102, 0.25), inset 0 0 6px rgba(0, 255, 102, 0.1);
+        }
+        .neon-glow-strong {
+            box-shadow: 0 0 25px rgba(0, 255, 102, 0.6), inset 0 0 10px rgba(0, 255, 102, 0.3);
+        }
+        .neon-text-glow {
+            text-shadow: 0 0 8px rgba(0, 255, 102, 0.7);
+        }
+        body {
+            background-color: #000000;
+            color: #00ff66;
+        }
+        .scanlines {
+            background: linear-gradient(
+                to bottom,
+                rgba(255,255,255,0),
+                rgba(255,255,255,0) 50%,
+                rgba(0, 0, 0, 0.5) 50%,
+                rgba(0, 0, 0, 0.5)
+            );
+            background-size: 100% 4px;
+        }
+    </style>
+</head>
+<body class="font-mono min-h-screen flex flex-col scanlines relative selection:bg-neon-green selection:text-black">
+
+    <!-- Top Status Bar / Header -->
+    <header class="border-b border-neon-green/40 bg-black/95 backdrop-blur sticky top-0 z-30 px-4 py-3 flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center space-x-3">
+            <div class="w-3 h-3 rounded-full bg-neon-green animate-pulse neon-glow"></div>
+            <h1 class="text-xl font-bold tracking-wider uppercase neon-text-glow flex items-center gap-2">
+                <i class="fa-solid fa-terminal"></i> CYBER_FILES // v2.4.0
+            </h1>
+        </div>
+        
+        <!-- Quick stats & system info -->
+        <div class="flex items-center space-x-6 text-xs text-neon-green/70">
+            <div class="hidden sm:block">STATUS: <span class="text-neon-green font-bold">ONLINE</span></div>
+            <div class="hidden md:block">ENCRYPTION: <span class="text-neon-green font-bold">AES-256</span></div>
+            <div>ESPAÇO: <span id="storage-used" class="text-neon-green font-bold">0 KB</span> / 100 MB</div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 grid grid-cols-1 lg:grid-cols-4 gap-6">
+
+        <!-- Sidebar / Navigation Tree -->
+        <aside class="lg:col-span-1 bg-black border border-neon-green/40 rounded-xl p-4 flex flex-col justify-between neon-glow">
+            <div>
+                <h2 class="text-sm font-bold uppercase tracking-widest text-neon-green border-b border-neon-green/30 pb-2 mb-4 flex items-center gap-2">
+                    <i class="fa-solid fa-sitemap"></i> Diretórios
+                </h2>
+                
+                <nav class="space-y-1">
+                    <button onclick="navigateToRoot()" class="w-full text-left px-3 py-2 rounded-lg text-sm transition-all flex items-center gap-3 bg-neon-dim border border-neon-green/60 text-neon-green neon-glow">
+                        <i class="fa-solid fa-house-laptop"></i> /root (Início)
+                    </button>
+                    <!-- Dynamic Folder Tree in Sidebar -->
+                    <div id="sidebar-folders" class="pl-4 mt-2 space-y-1 border-l border-neon-green/30">
+                        <!-- Populated via JS -->
+                    </div>
+                </nav>
+            </div>
+
+            <!-- System Info Widget -->
+            <div class="mt-6 pt-4 border-t border-neon-green/30 text-xs text-neon-green/70 space-y-2">
+                <div class="flex justify-between">
+                    <span>SECTOR:</span>
+                    <span class="text-neon-green">ALPHA-7</span>
+                </div>
+                <div class="flex justify-between">
+                    <span>NODE:</span>
+                    <span class="text-neon-green">SECURE</span>
+                </div>
+                <div class="w-full bg-neon-dim h-2 rounded-full overflow-hidden border border-neon-green/40 mt-2">
+                    <div id="storage-bar" class="bg-neon-green h-full w-[5%] transition-all duration-300"></div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content Area: Toolbar + File Grid + Details Panel -->
+        <section class="lg:col-span-3 flex flex-col gap-4">
+
+            <!-- Toolbar & Breadcrumbs -->
+            <div class="bg-black border border-neon-green/40 rounded-xl p-4 flex flex-wrap items-center justify-between gap-4 neon-glow">
+                
+                <!-- Breadcrumb Navigation -->
+                <div id="breadcrumb" class="flex items-center space-x-2 text-sm overflow-x-auto py-1">
+                    <!-- Populated via JS -->
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="flex items-center gap-2 flex-wrap">
+                    <button onclick="openModal('folderModal')" class="px-3 py-2 bg-black hover:bg-neon-green hover:text-black border border-neon-green/60 rounded-lg text-xs font-bold uppercase transition-all flex items-center gap-2 cursor-pointer">
+                        <i class="fa-solid fa-folder-plus"></i> Nova Pasta
+                    </button>
+                    <button onclick="openModal('fileModal')" class="px-3 py-2 bg-neon-green text-black hover:bg-black hover:text-neon-green border border-neon-green rounded-lg text-xs font-bold uppercase transition-all flex items-center gap-2 cursor-pointer neon-glow">
+                        <i class="fa-solid fa-file-circle-plus"></i> Novo Arquivo
+                    </button>
+                </div>
+            </div>
+
+            <!-- Search and Filter Bar -->
+            <div class="flex items-center gap-3 bg-black border border-neon-green/40 rounded-xl p-3">
+                <i class="fa-solid fa-magnifying-glass text-neon-green/70 pl-2"></i>
+                <input type="text" id="searchInput" oninput="filterItems()" placeholder="Pesquisar arquivos ou pastas..." class="w-full bg-transparent border-none outline-none text-sm text-neon-green placeholder-neon-green/40 font-mono">
+                <div class="text-xs text-neon-green/60 pr-2 whitespace-nowrap" id="itemCount">0 itens</div>
+            </div>
+
+            <!-- File Explorer Grid / Table View -->
+            <div class="bg-black border border-neon-green/40 rounded-xl p-4 flex-1 min-h-[400px] flex flex-col justify-between neon-glow">
+                
+                <!-- Items Grid -->
+                <div id="file-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 content-start">
+                    <!-- Dynamic Items loaded here -->
+                </div>
+
+                <!-- Empty State Message -->
+                <div id="empty-state" class="hidden flex-col items-center justify-center py-16 text-center text-neon-green/50">
+                    <i class="fa-solid fa-folder-open text-5xl mb-3"></i>
+                    <p class="text-sm">Diretório vazio. Crie uma pasta ou arquivo para começar.</p>
+                </div>
+
+                <!-- Footer Summary inside Explorer -->
+                <div class="mt-6 pt-3 border-t border-neon-green/30 flex flex-wrap justify-between items-center text-xs text-neon-green/70">
+                    <span id="current-path-label">Caminho: /</span>
+                    <span id="selected-item-info">Nenhum item selecionado</span>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Modal: Criar Pasta -->
+    <div id="folderModal" class="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-black border border-neon-green rounded-xl p-6 max-w-md w-full neon-glow-strong animate-in fade-in zoom-in duration-200">
+            <div class="flex justify-between items-center mb-4 border-b border-neon-green/30 pb-2">
+                <h3 class="text-lg font-bold text-neon-green flex items-center gap-2">
+                    <i class="fa-solid fa-folder-plus"></i> Criar Nova Pasta
+                </h3>
+                <button onclick="closeModal('folderModal')" class="text-neon-green/70 hover:text-neon-green"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs uppercase text-neon-green/80 mb-1">Nome da Pasta</label>
+                    <input type="text" id="folderNameInput" placeholder="ex: src, docs, configs..." class="w-full bg-black border border-neon-green/60 rounded-lg p-2.5 text-sm text-neon-green outline-none focus:border-neon-green neon-glow">
+                </div>
+                <div class="flex justify-end gap-3 pt-2">
+                    <button onclick="closeModal('folderModal')" class="px-4 py-2 border border-neon-green/40 rounded-lg text-xs text-neon-green/80 hover:bg-neon-dim">Cancelar</button>
+                    <button onclick="createFolder()" class="px-4 py-2 bg-neon-green text-black font-bold rounded-lg text-xs hover:bg-black hover:text-neon-green border border-neon-green neon-glow">Criar Pasta</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Criar Arquivo -->
+    <div id="fileModal" class="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-black border border-neon-green rounded-xl p-6 max-w-lg w-full neon-glow-strong">
+            <div class="flex justify-between items-center mb-4 border-b border-neon-green/30 pb-2">
+                <h3 class="text-lg font-bold text-neon-green flex items-center gap-2">
+                    <i class="fa-solid fa-file-circle-plus"></i> Criar Novo Arquivo
+                </h3>
+                <button onclick="closeModal('fileModal')" class="text-neon-green/70 hover:text-neon-green"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-xs uppercase text-neon-green/80 mb-1">Nome do Arquivo (com extensão)</label>
+                    <input type="text" id="fileNameInput" placeholder="ex: main.py, config.json, index.html..." class="w-full bg-black border border-neon-green/60 rounded-lg p-2.5 text-sm text-neon-green outline-none focus:border-neon-green neon-glow">
+                </div>
+                <div>
+                    <label class="block text-xs uppercase text-neon-green/80 mb-1">Conteúdo do Arquivo</label>
+                    <textarea id="fileContentInput" rows="5" placeholder="Digite ou cole o código/conteúdo aqui..." class="w-full bg-black border border-neon-green/60 rounded-lg p-2.5 text-sm text-neon-green outline-none focus:border-neon-green neon-glow font-mono"></textarea>
+                </div>
+                <div class="flex justify-end gap-3 pt-2">
+                    <button onclick="closeModal('fileModal')" class="px-4 py-2 border border-neon-green/40 rounded-lg text-xs text-neon-green/80 hover:bg-neon-dim">Cancelar</button>
+                    <button onclick="createFile()" class="px-4 py-2 bg-neon-green text-black font-bold rounded-lg text-xs hover:bg-black hover:text-neon-green border border-neon-green neon-glow">Salvar Arquivo</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Visualizar Detalhes ou Conteúdo do Arquivo -->
+    <div id="detailsModal" class="fixed inset-0 bg-black/90 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-black border border-neon-green rounded-xl p-6 max-w-2xl w-full neon-glow-strong flex flex-col max-h-[85vh]">
+            <div class="flex justify-between items-center mb-4 border-b border-neon-green/30 pb-2">
+                <h3 id="modalItemTitle" class="text-lg font-bold text-neon-green flex items-center gap-2 truncate">
+                    <i class="fa-solid fa-file-lines"></i> Detalhes do Item
+                </h3>
+                <button onclick="closeModal('detailsModal')" class="text-neon-green/70 hover:text-neon-green"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            
+            <div class="space-y-4 overflow-y-auto flex-1 pr-1">
+                <div class="grid grid-cols-2 gap-4 bg-black p-3 rounded-lg border border-neon-green/30 text-xs">
+                    <div><span class="text-neon-green/60 block">Tipo:</span> <span id="detailType" class="font-bold">Arquivo</span></div>
+                    <div><span class="text-neon-green/60 block">Tamanho:</span> <span id="detailSize" class="font-bold">0 B</span></div>
+                    <div><span class="text-neon-green/60 block">Data de Criação:</span> <span id="detailDate" class="font-bold">-</span></div>
+                    <div><span class="text-neon-green/60 block">Caminho Absoluto:</span> <span id="detailPath" class="font-bold truncate">/</span></div>
+                </div>
+
+                <div id="fileContentSection" class="hidden">
+                    <label class="block text-xs uppercase text-neon-green/80 mb-1">Conteúdo Armazenado</label>
+                    <pre id="detailContent" class="bg-black border border-neon-green/40 rounded-lg p-3 text-xs text-neon-green overflow-x-auto max-h-60 font-mono"></pre>
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-3 pt-4 border-t border-neon-green/30 mt-4">
+                <button onclick="closeModal('detailsModal')" class="px-4 py-2 border border-neon-green/40 rounded-lg text-xs text-neon-green hover:bg-neon-dim">Fechar</button>
+                <button id="modalDeleteBtn" onclick="" class="px-4 py-2 bg-red-950/80 border border-red-500 text-red-400 hover:bg-red-900 rounded-lg text-xs font-bold transition-all flex items-center gap-2">
+                    <i class="fa-solid fa-trash"></i> Excluir Item
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification Custom Toast -->
+    <div id="toast" class="fixed bottom-5 right-5 bg-black border border-neon-green text-neon-green px-4 py-3 rounded-xl shadow-lg neon-glow transform translate-y-20 opacity-0 transition-all duration-300 z-50 flex items-center gap-3 text-xs">
+        <i id="toastIcon" class="fa-solid fa-circle-check text-base"></i>
+        <span id="toastMessage">Ação realizada com sucesso!</span>
+    </div>
+
+    <!-- JavaScript Application Logic -->
+    <script>
+        // Initial Mock File System Data structure
+        let fileSystem = [
+            { id: '1', name: 'documents', type: 'folder', parentId: null, createdAt: new Date().toISOString() },
+            { id: '2', name: 'src', type: 'folder', parentId: null, createdAt: new Date().toISOString() },
+            { id: '3', name: 'readme.md', type: 'file', parentId: null, content: '# CyberOS File System\nBem-vindo ao gerenciador seguro.\nUse os comandos para gerenciar seus arquivos.', size: 98, createdAt: new Date().toISOString() },
+            { id: '4', name: 'config.json', type: 'file', parentId: '2', content: '{\n  "theme": "neon-green",\n  "security": "maximum",\n  "debug": false\n}', size: 68, createdAt: new Date().toISOString() },
+            { id: '5', name: 'index.html', type: 'file', parentId: '2', content: '<!DOCTYPE html>\n<html>\n<head><title>Cyber</title></head>\n<body><h1>Hello Hacker</h1></body>\n</html>', size: 115, createdAt: new Date().toISOString() }
+        ];
+
+        let currentFolderId = null; // null means root directory '/'
+
+        // Initialize application on load
+        window.onload = function() {
+            renderFileSystem();
+            renderSidebarFolders();
+        };
+
+        // --- Navigation Functions ---
+        function navigateTo(folderId) {
+            currentFolderId = folderId;
+            renderFileSystem();
+        }
+
+        function navigateToRoot() {
+            currentFolderId = null;
+            renderFileSystem();
+        }
+
+        // --- Render Functions ---
+        function renderFileSystem() {
+            const grid = document.getElementById('file-grid');
+            const emptyState = document.getElementById('empty-state');
+            const breadcrumb = document.getElementById('breadcrumb');
+            const currentPathLabel = document.getElementById('current-path-label');
+            const itemCount = document.getElementById('itemCount');
+
+            grid.innerHTML = '';
+
+            // Filter items for current directory
+            const currentItems = fileSystem.filter(item => item.parentId === currentFolderId);
+            
+            itemCount.innerText = `${currentItems.length} ${currentItems.length === 1 ? 'item' : 'itens'}`;
+
+            if (currentItems.length === 0) {
+                emptyState.classList.remove('hidden');
+                emptyState.classList.add('flex');
+            } else {
+                emptyState.classList.remove('flex');
+                emptyState.classList.add('hidden');
+
+                currentItems.forEach(item => {
+                    const card = document.createElement('div');
+                    card.className = "bg-black border border-neon-green/40 hover:border-neon-green rounded-xl p-4 flex items-center justify-between transition-all group cursor-pointer relative hover:neon-glow";
+                    
+                    const iconClass = item.type === 'folder' 
+                        ? 'fa-folder text-yellow-400 group-hover:scale-110 transition-transform' 
+                        : getFileIcon(item.name);
+
+                    const sizeFormatted = item.type === 'file' ? formatBytes(item.size) : `${fileSystem.filter(f => f.parentId === item.id).length} itens`;
+
+                    card.innerHTML = `
+                        <div class="flex items-center gap-3.5 overflow-hidden" onclick="${item.type === 'folder' ? `navigateTo('${item.id}')` : `openDetails('${item.id}')`}">
+                            <div class="w-10 h-10 rounded-lg bg-black border border-neon-green/40 flex items-center justify-center text-lg shrink-0">
+                                <i class="fa-solid ${iconClass}"></i>
+                            </div>
+                            <div class="overflow-hidden">
+                                <h4 class="text-sm font-bold text-neon-green truncate group-hover:underline">${escapeHtml(item.name)}</h4>
+                                <p class="text-[10px] text-neon-green/70">${sizeFormatted}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-1 opacity-80 group-hover:opacity-100">
+                            <button onclick="event.stopPropagation(); openDetails('${item.id}')" title="Detalhes" class="p-2 text-neon-green/85 hover:text-neon-green hover:bg-neon-dim rounded-lg transition-colors">
+                                <i class="fa-solid fa-circle-info"></i>
+                            </button>
+                            <button onclick="event.stopPropagation(); deleteItem('${item.id}')" title="Excluir" class="p-2 text-red-400/80 hover:text-red-400 hover:bg-red-950/50 rounded-lg transition-colors">
+                                <i class="fa-solid fa-trash"></i>
+                            </button>
+                        </div>
+                    `;
+                    grid.appendChild(card);
+                });
+            }
+
+            renderBreadcrumbs();
+            updateStorageStats();
+        }
+
+        function renderBreadcrumbs() {
+            const breadcrumb = document.getElementById('breadcrumb');
+            const currentPathLabel = document.getElementById('current-path-label');
+            
+            let crumbs = [{ id: null, name: 'root' }];
+            let curr = currentFolderId;
+            let pathSegments = [];
+
+            while (curr !== null) {
+                const folder = fileSystem.find(f => f.id === curr);
+                if (folder) {
+                    pathSegments.unshift(folder);
+                    curr = folder.parentId;
+                } else {
+                    break;
+                }
+            }
+
+            let fullPathStr = '/' + pathSegments.map(p => p.name).join('/');
+            currentPathLabel.innerText = `Caminho: ${fullPathStr}`;
+
+            let html = `<button onclick="navigateToRoot()" class="text-neon-green hover:underline flex items-center gap-1 shrink-0"><i class="fa-solid fa-house"></i> /</button>`;
+            
+            pathSegments.forEach((folder, index) => {
+                const isLast = index === pathSegments.length - 1;
+                html += `<span class="text-neon-green/50">/</span>`;
+                if (isLast) {
+                    html += `<span class="text-neon-green font-bold truncate">${escapeHtml(folder.name)}</span>`;
+                } else {
+                    html += `<button onclick="navigateTo('${folder.id}')" class="text-neon-green/80 hover:text-neon-green hover:underline truncate">${escapeHtml(folder.name)}</button>`;
+                }
+            });
+
+            breadcrumb.innerHTML = html;
+        }
+
+        function renderSidebarFolders() {
+            const container = document.getElementById('sidebar-folders');
+            const rootFolders = fileSystem.filter(item => item.type === 'folder' && item.parentId === null);
+
+            if (rootFolders.length === 0) {
+                container.innerHTML = '<div class="text-xs text-neon-green/40 italic pl-2">Nenhuma pasta</div>';
+                return;
+            }
+
+            let html = '';
+            rootFolders.forEach(folder => {
+                html += `
+                    <button onclick="navigateTo('${folder.id}')" class="w-full text-left px-2 py-1.5 rounded text-xs text-neon-green/85 hover:bg-neon-dim hover:text-neon-green transition-all flex items-center gap-2 truncate">
+                        <i class="fa-solid fa-folder text-yellow-400 shrink-0"></i> <span class="truncate">${escapeHtml(folder.name)}</span>
+                    </button>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        // --- File Type Icons Helper ---
+        function getFileIcon(filename) {
+            const ext = filename.split('.').pop().toLowerCase();
+            switch (ext) {
+                case 'js':
+                case 'py':
+                case 'html':
+                case 'json':
+                case 'css': return 'fa-file-code text-neon-green';
+                case 'md':
+                case 'txt': return 'fa-file-lines text-blue-400';
+                case 'png':
+                case 'jpg':
+                case 'jpeg': return 'fa-file-image text-purple-400';
+                default: return 'fa-file text-neon-green/80';
+            }
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        }
+
+        // --- Create Actions ---
+        function createFolder() {
+            const input = document.getElementById('folderNameInput');
+            const name = input.value.trim();
+
+            if (!name) {
+                showToast('Digite um nome válido para a pasta!', 'error');
+                return;
+            }
+
+            const exists = fileSystem.some(item => item.parentId === currentFolderId && item.name.toLowerCase() === name.toLowerCase());
+            if (exists) {
+                showToast('Já existe um item com este nome neste diretório!', 'error');
+                return;
+            }
+
+            const newFolder = {
+                id: Date.now().toString(),
+                name: name,
+                type: 'folder',
+                parentId: currentFolderId,
+                createdAt: new Date().toISOString()
+            };
+
+            fileSystem.push(newFolder);
+            input.value = '';
+            closeModal('folderModal');
+            renderFileSystem();
+            renderSidebarFolders();
+            showToast(`Pasta "${name}" criada com sucesso!`);
+        }
+
+        function createFile() {
+            const nameInput = document.getElementById('fileNameInput');
+            const contentInput = document.getElementById('fileContentInput');
+            const name = nameInput.value.trim();
+            const content = contentInput.value;
+
+            if (!name) {
+                showToast('Digite o nome do arquivo!', 'error');
+                return;
+            }
+
+            const exists = fileSystem.some(item => item.parentId === currentFolderId && item.name.toLowerCase() === name.toLowerCase());
+            if (exists) {
+                showToast('Já existe um item com este nome neste diretório!', 'error');
+                return;
+            }
+
+            const newFile = {
+                id: Date.now().toString(),
+                name: name,
+                type: 'file',
+                parentId: currentFolderId,
+                content: content,
+                size: new Blob([content]).size,
+                createdAt: new Date().toISOString()
+            };
+
+            fileSystem.push(newFile);
+            nameInput.value = '';
+            contentInput.value = '';
+            closeModal('fileModal');
+            renderFileSystem();
+            showToast(`Arquivo "${name}" criado com sucesso!`);
+        }
+
+        // --- Delete Action ---
+        function deleteItem(itemId) {
+            const item = fileSystem.find(f => f.id === itemId);
+            if (!item) return;
+
+            if (confirmAction(`Tem certeza que deseja excluir "${item.name}"?`)) {
+                const idsToDelete = [itemId];
+                if (item.type === 'folder') {
+                    collectChildIds(itemId, idsToDelete);
+                }
+
+                fileSystem = fileSystem.filter(f => !idsToDelete.includes(f.id));
+                renderFileSystem();
+                renderSidebarFolders();
+                showToast(`Item "${item.name}" excluído.`, 'error');
+            }
+        }
+
+        function collectChildIds(folderId, idList) {
+            const children = fileSystem.filter(f => f.parentId === folderId);
+            children.forEach(child => {
+                idList.push(child.id);
+                if (child.type === 'folder') {
+                    collectChildIds(child.id, idList);
+                }
+            });
+        }
+
+        function confirmAction(message) {
+            return window.confirm(message);
+        }
+
+        // --- Details Modal ---
+        function openDetails(itemId) {
+            const item = fileSystem.find(f => f.id === itemId);
+            if (!item) return;
+
+            document.getElementById('modalItemTitle').innerHTML = `<i class="fa-solid ${item.type === 'folder' ? 'fa-folder text-yellow-400' : getFileIcon(item.name)}"></i> ${escapeHtml(item.name)}`;
+            document.getElementById('detailType').innerText = item.type === 'folder' ? 'Diretório (Pasta)' : 'Arquivo de Texto/Código';
+            document.getElementById('detailSize').innerText = item.type === 'file' ? formatBytes(item.size) : '-';
+            document.getElementById('detailDate').innerText = new Date(item.createdAt).toLocaleString('pt-BR');
+            
+            let curr = item.parentId;
+            let pathArr = [item.name];
+            while (curr !== null) {
+                let f = fileSystem.find(x => x.id === curr);
+                if (f) {
+                    pathArr.unshift(f.name);
+                    curr = f.parentId;
+                } else break;
+            }
+            document.getElementById('detailPath').innerText = '/' + pathArr.join('/');
+
+            const contentSection = document.getElementById('fileContentSection');
+            if (item.type === 'file') {
+                contentSection.classList.remove('hidden');
+                document.getElementById('detailContent').innerText = item.content || '(Arquivo vazio)';
+            } else {
+                contentSection.classList.add('hidden');
+            }
+
+            document.getElementById('modalDeleteBtn').setAttribute('onclick', `closeModal('detailsModal'); deleteItem('${item.id}')`);
+
+            openModal('detailsModal');
+        }
+
+        // --- Search/Filter Logic ---
+        function filterItems() {
+            const query = document.getElementById('searchInput').value.toLowerCase();
+            const grid = document.getElementById('file-grid');
+            
+            const currentItems = fileSystem.filter(item => item.parentId === currentFolderId && item.name.toLowerCase().includes(query));
+            
+            grid.innerHTML = '';
+            currentItems.forEach(item => {
+                const card = document.createElement('div');
+                card.className = "bg-black border border-neon-green/40 hover:border-neon-green rounded-xl p-4 flex items-center justify-between transition-all group cursor-pointer relative hover:neon-glow";
+                
+                const iconClass = item.type === 'folder' 
+                    ? 'fa-folder text-yellow-400 group-hover:scale-110 transition-transform' 
+                    : getFileIcon(item.name);
+
+                const sizeFormatted = item.type === 'file' ? formatBytes(item.size) : `${fileSystem.filter(f => f.parentId === item.id).length} itens`;
+
+                card.innerHTML = `
+                    <div class="flex items-center gap-3.5 overflow-hidden" onclick="${item.type === 'folder' ? `navigateTo('${item.id}')` : `openDetails('${item.id}')`}">
+                        <div class="w-10 h-10 rounded-lg bg-black border border-neon-green/40 flex items-center justify-center text-lg shrink-0">
+                            <i class="fa-solid ${iconClass}"></i>
+                        </div>
+                        <div class="overflow-hidden">
+                            <h4 class="text-sm font-bold text-neon-green truncate group-hover:underline">${escapeHtml(item.name)}</h4>
+                            <p class="text-[10px] text-neon-green/70">${sizeFormatted}</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-1 opacity-80 group-hover:opacity-100">
+                        <button onclick="event.stopPropagation(); openDetails('${item.id}')" title="Detalhes" class="p-2 text-neon-green/85 hover:text-neon-green hover:bg-neon-dim rounded-lg transition-colors">
+                            <i class="fa-solid fa-circle-info"></i>
+                        </button>
+                        <button onclick="event.stopPropagation(); deleteItem('${item.id}')" title="Excluir" class="p-2 text-red-400/80 hover:text-red-400 hover:bg-red-950/50 rounded-lg transition-colors">
+                            <i class="fa-solid fa-trash"></i>
+                        </button>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        // --- Storage Calculation ---
+        function updateStorageStats() {
+            let totalBytes = fileSystem.filter(i => i.type === 'file').reduce((acc, curr) => acc + (curr.size || 0), 0);
+            document.getElementById('storage-used').innerText = formatBytes(totalBytes);
+            
+            let percentage = Math.min(Math.max((totalBytes / (100 * 1024 * 1024)) * 100, 1), 100);
+            document.getElementById('storage-bar').style.width = `${percentage}%`;
+        }
+
+        // --- Modal Controls ---
+        function openModal(modalId) {
+            document.getElementById(modalId).classList.remove('hidden');
+            document.getElementById(modalId).classList.add('flex');
+        }
+
+        function closeModal(modalId) {
+            document.getElementById(modalId).classList.remove('flex');
+            document.getElementById(modalId).classList.add('hidden');
+        }
+
+        // --- Toast Notification ---
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            const toastMessage = document.getElementById('toastMessage');
+            const toastIcon = document.getElementById('toastIcon');
+
+            toastMessage.innerText = message;
+            if (type === 'error') {
+                toast.className = "fixed bottom-5 right-5 bg-black border border-red-500 text-red-400 px-4 py-3 rounded-xl shadow-lg transform translate-y-0 opacity-100 transition-all duration-300 z-50 flex items-center gap-3 text-xs";
+                toastIcon.className = "fa-solid fa-triangle-exclamation text-base";
+            } else {
+                toast.className = "fixed bottom-5 right-5 bg-black border border-neon-green text-neon-green px-4 py-3 rounded-xl shadow-lg neon-glow transform translate-y-0 opacity-100 transition-all duration-300 z-50 flex items-center gap-3 text-xs";
+                toastIcon.className = "fa-solid fa-circle-check text-base";
+            }
+
+            setTimeout(() => {
+                toast.classList.remove('translate-y-0', 'opacity-100');
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
+        }
+
+        function escapeHtml(text) {
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return text.replace(/[&<>"']/g, function(m) { return map[m]; });
+        }
+    </script>
+</body>
+</html>
+```
